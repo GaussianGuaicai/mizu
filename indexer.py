@@ -13,7 +13,10 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-from .embeddings import EmbeddingModel, sample_video_frames
+try:
+    from .embeddings import EmbeddingModel, sample_video_frames
+except ImportError:  # pragma: no cover - support running as a script module
+    from embeddings import EmbeddingModel, sample_video_frames
 
 # Optional OpenCV import for robust resizing
 try:
