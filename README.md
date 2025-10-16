@@ -66,7 +66,6 @@ Video results arrive organized by source file. Selecting a video tile reveals al
 - The embedding backend attempts INT8 quantization via BitsAndBytes when enabled; install `bitsandbytes` GPU builds for best performance.
 - Optional Flash Attention requires compatible hardware and the `flash-attn` package. The checkbox is ignored when the kernel is unavailable.
 - If you frequently work with HEIC/HEIF/AVIF media, the app precomputes temporary JPEG previews under your system temp directory and cleans them up on exit.
-- Text files larger than 20 kB are truncated during indexing to keep embeddings manageable.
 
 ## Web UI preview
 
@@ -74,7 +73,6 @@ Video results arrive organized by source file. Selecting a video tile reveals al
 
 ## Troubleshooting
 
-- **Torch wheel errors**: confirm that your CUDA toolkit matches the pinned wheel (`cu128`) or install the CPU-only variant of Torch if you do not have an NVIDIA GPU.
 - **BitsAndBytes not found**: reinstall with `pip install bitsandbytes>=0.48.1` and ensure you are using a CUDA-enabled build.
 - **Missing model files**: run `huggingface-cli login` and make sure `jinaai/jina-embeddings-v4` is accessible to your account; the first run will download the necessary weights.
 
