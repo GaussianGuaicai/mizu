@@ -1,19 +1,18 @@
 # mizu
 
-An end-to-end Retrieval-Augmented Generation (RAG) workbench for visual and textual media. `mizu` lets you index folders of images, videos, and companion text files into ChromaDB, then explore them through a Gradio-powered web UI with multimodal search.
+An visual media RAG pipline that indexed tens of thousands of my images and videos. `mizu` lets you index folders of visual media files into ChromaDB, then explore them through a Gradio Web UI with multimodal search.
 
 ## Highlights
 
 - **Interactive UI** – single-page Gradio app with dedicated tabs for indexing new media and searching existing collections.
-- **Multimodal embeddings** – wraps the `jinaai/jina-embeddings-v4` model to embed text, still images, or sampled video frames.
+- **Multimodal embeddings** – wraps the `jinaai/jina-embeddings-v4` model to embed still images, or sampled video frames.
 - **Video-aware search** – extracts representative frames, preserves timestamps, and groups results per source video.
 - **HEIF/AVIF friendly** – transparently converts HEIC/HEIF/AVIF images for display while keeping the originals untouched.
-- **Optimized indexing** – asynchronous, batched ingestion with optional INT8 quantization and Flash Attention acceleration when the toolchain supports it.
+- **Optimized for mass indexing** – asynchronous, batched ingestion with optional INT8 quantization and Flash Attention acceleration when the toolchain supports it.
 
 ## Requirements
 
 - Python 3.12+
-- CUDA-capable GPU strongly recommended (Torch 2.7.0+cu128 is pinned in `pyproject.toml`). CPU-only execution is possible but considerably slower for embeddings.
 - Access to the Hugging Face model **`jinaai/jina-embeddings-v4`**. Accept the model license in your Hugging Face account before first use.
 
 Core dependencies are declared in `pyproject.toml` and include ChromaDB, Gradio, Transformers, Torch, OpenCV, BitsAndBytes, and pi-heif.
@@ -23,11 +22,8 @@ Core dependencies are declared in `pyproject.toml` and include ChromaDB, Gradio,
 ```bash
 # 1. Create and activate a virtual environment (venv, uv, conda, etc.)
 
-# 2. Install the project in editable mode
-pip install -e .
-
 # If pip cannot locate the CUDA-enabled torch wheel, install it explicitly:
-pip install torch==2.7.0+cu128 --index-url https://download.pytorch.org/whl/cu128
+pip install torch --index-url https://download.pytorch.org/whl/cu128
 
 # Optional extras for Flash Attention on supported platforms
 pip install flash-attn triton-windows>=3.4.0.post20
@@ -45,7 +41,7 @@ After the startup logs, Gradio will display a local URL (and optionally a public
 
 1. Switch to the **Index** tab.
 2. (Optional) Pick a custom ChromaDB `persist_dir` if you want to isolate datasets.
-3. Point **Folder to index** at a directory containing images (`.jpg`, `.png`, `.heic`, `.avif`, …), videos (`.mp4`, `.mov`, `.mkv`, …), or supported text sidecars (`.txt`, `.md`, `.pdf`, `.docx`).
+3. Point **Folder to index** at a directory containing images (`.jpg`, `.png`, `.heic`, `.avif`, …), videos (`.mp4`, `.mov`, `.mkv`, …).
 4. Choose ingestion options:
 	- **Add only**: skip already indexed media.
 	- **Batch size**: controls embedding batch size (higher = faster, more VRAM).
@@ -73,7 +69,7 @@ Video results arrive organized by source file. Selecting a video tile reveals al
 
 ## Web UI preview
 
-![Replace with your screenshot](webui-preview.jpg)
+![webui](webui-preview.jpg)
 
 ## Troubleshooting
 
