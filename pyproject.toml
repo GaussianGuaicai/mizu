@@ -12,14 +12,13 @@ dependencies = [
     "torch==2.7.0+cu128",
     "torchvision",
     "opencv-python-headless>=4.12.0.88",
-    "bitsandbytes>=0.48.1",
-    "flash-attn",
-    "triton-windows>=3.4.0.post20",
+    "bitsandbytes>=0.48.1"
 ]
 
 [project.optional-dependencies]
 ipykernel = [
-    "ipykernel>=7.0.1",
+    "flash-attn",
+    "triton-windows>=3.4.0.post20"
 ]
 
 [[tool.uv.index]]

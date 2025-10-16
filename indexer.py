@@ -796,8 +796,11 @@ class ChromaRAG:
 
     @staticmethod
     def _merge_results(results: Sequence[Any], k: int) -> Dict[str, Any]:
-        """Merge multiple Chroma query results into a single result sorted by distance.
+        """Deprecated helper retained for backwards compatibility.
 
-        Since thumbnails are stored on disk, we only propagate metadata & distances.
+        The application now returns modality-specific results directly, so this
+        method deliberately raises to make accidental uses obvious. Callers
+        should consume the per-collection responses instead of attempting to
+        merge them.
         """
-        raise NotImplementedError("_merge_results no longer used; results returned per collection.")
+        raise NotImplementedError("_merge_results is deprecated; results are returned per collection.")

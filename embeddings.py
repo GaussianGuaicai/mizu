@@ -1,32 +1,19 @@
 from __future__ import annotations
 
+"""Utilities for working with the ``jinaai/jina-embeddings-v4`` transformer.
+
+The module exposes :class:`EmbeddingModel`, a lightweight wrapper around the
+model's remote-code helpers for computing text, image, and video-frame
+embeddings, and :func:`sample_video_frames` for extracting representative
+frames with OpenCV.
+
+Optional 8-bit quantization is attempted when ``quantize=True`` and the
+``bitsandbytes`` stack is available (GPU strongly recommended). If quantization
+cannot be configured, a clear runtime error is raised so callers can install
+the missing dependencies.
+"""
+
 from typing import List, Tuple, Optional, Union, Any, cast
-"""
-Embeddings using Hugging Face transformers only.
-
-Model: jinaai/jina-embeddings-v4 (loaded via transformers with trust_remote_code=True)
-
-Dependencies:
-- transformers
-- torch (CUDA optional)
-
-This module intentionally avoids sentence-transformers and calls the model's
-custom encode helpers (provided by the model implementation when using
-`trust_remote_code=True`) such as `encode_text` / `encode_image`.
-
-Quantization (experimental):
-- You can enable lightweight quantized loading (via bitsandbytes/BitsAndBytes
-    integration in Transformers) by setting `quantize=True` when constructing
-    `EmbeddingModel`. The code configures a `BitsAndBytesConfig` to request a
-    lower-precision/efficient load path. Make sure the `bitsandbytes` package
-    (and Transformers support) is installed in your environment if you enable
-    this option.
-
-Notes:
-- This file updates model loading and docstrings only; runtime behavior is
-    unchanged. The model's `encode_*` helpers are invoked directly and the
-    wrapper returns numpy float32 arrays.
-"""
 import numpy as np
 from PIL import Image
 
@@ -49,7 +36,10 @@ class EmbeddingModel:
 
     Notes:
     - Loads to CUDA automatically if available, otherwise CPU.
-    - Returns L2-normalized float32 numpy arrays by default.
+        - Returns float32 numpy arrays exactly as produced by the model (no extra
+            normalization is applied here).
+        - Optional Flash Attention support is enabled via ``enable_flash_atten``
+            when the underlying transformers build supports it.
     """
 
     def __init__(
