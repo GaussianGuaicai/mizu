@@ -20,7 +20,8 @@ Core dependencies are declared in `pyproject.toml` and include ChromaDB, Gradio,
 ## Installation
 
 ```bash
-# 1. Create and activate a virtual environment (venv, uv, conda, etc.)
+# Install dependencies in virtual environment
+pip install -r requirements.txt
 
 # If pip cannot locate the CUDA-enabled torch wheel, install it explicitly:
 pip install torch --index-url https://download.pytorch.org/whl/cu128
