@@ -1,6 +1,6 @@
 # mizu
 
-An visual media RAG pipline that indexed tens of thousands of my images and videos. `mizu` lets you index folders of visual media files into ChromaDB, then explore them through a Gradio Web UI with multimodal search.
+An visual media RAG pipeline that indexed tens of thousands of my images and videos. `mizu` lets you index folders of visual media files into ChromaDB, then explore them through a Gradio Web UI with multimodal search.
 
 ## Highlights
 
