@@ -5,7 +5,7 @@ An visual media RAG pipline that indexed tens of thousands of my images and vide
 ## Highlights
 
 - **Interactive UI** – single-page Gradio app with dedicated tabs for indexing new media and searching existing collections.
-- **Multimodal embeddings** – wraps the `jinaai/jina-embeddings-v4` model to embed still images, or sampled video frames.
+- **Multimodal embeddings** – `mizu` use `jinaai/jina-embeddings-v4` as default to embed images and sampled video frames.
 - **Video-aware search** – extracts representative frames, preserves timestamps, and groups results per source video.
 - **HEIF/AVIF friendly** – transparently converts HEIC/HEIF/AVIF images for display while keeping the originals untouched.
 - **Optimized for mass indexing** – asynchronous, batched ingestion with optional INT8 quantization and Flash Attention acceleration when the toolchain supports it.
@@ -13,7 +13,7 @@ An visual media RAG pipline that indexed tens of thousands of my images and vide
 ## Requirements
 
 - Python 3.12+
-- Access to the Hugging Face model **`jinaai/jina-embeddings-v4`**. Accept the model license in your Hugging Face account before first use.
+- Access to the Hugging Face model **`jinaai/jina-embeddings-v4`**[![Model on HF](https://huggingface.co/datasets/huggingface/badges/resolve/main/model-on-hf-sm.svg)](https://huggingface.co/jinaai/jina-embeddings-v4). Accept the model license in your Hugging Face account before first use.
 
 Core dependencies are declared in `pyproject.toml` and include ChromaDB, Gradio, Transformers, Torch, OpenCV, BitsAndBytes, and pi-heif.
 
@@ -26,7 +26,7 @@ pip install -r requirements.txt
 # If pip cannot locate the CUDA-enabled torch wheel, install it explicitly:
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 
-# Optional extras for Flash Attention on supported platforms
+# Optional extras for Flash Attention on supported platforms, this is the method to compile & install flash-attn in Windows
 pip install flash-attn triton-windows>=3.4.0.post20
 ```
 
