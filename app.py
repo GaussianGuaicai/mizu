@@ -235,8 +235,8 @@ def get_rag(persist_dir: str) -> ChromaRAG:
 
 
 def build_interface() -> gr.Blocks:
-    with gr.Blocks(title="RAG Image/Video Search (ChromaDB)") as demo:
-        gr.Markdown("# RAG Image/Video Search\nIndex a folder of images and videos, then search by text or image.")
+    with gr.Blocks(title="Mizu RAG Search") as demo:
+        gr.Markdown("# Mizu RAG Image/Video Search\nIndex a folder of images and videos, then search by text or image.")
         gr.Markdown("## Settings")
         persist_dir_box = gr.Textbox(label="ChromaDB persist_dir", value=".chroma", placeholder=".chroma")
         enable_quantize = gr.Checkbox(label="Enable model quantization", value=QUANTIZE, info="When enabled, use a smaller quantized embedding model (quantize to int8, slightly less accurate).")
@@ -258,6 +258,10 @@ def build_interface() -> gr.Blocks:
             folder = gr.Textbox(label="Folder to index", placeholder="C:/path/to/media or /path/to/media")
             add_only = gr.Checkbox(label="Add only (skip updates)", value=True, info="When enabled, only add new items; skip updating existing items in the index.")
             batch_size = gr.Slider(1, 32, value=8, step=1, label="Batch size", info="Number of items to embed in one batch. Larger values use more memory but may be faster.")
+            with gr.Column():
+                image_workers = gr.Slider(1, 16, value=4, step=1, label="Image workers", info="Maximum concurrent image loading operations.")
+                video_workers = gr.Slider(1, 8, value=2, step=1, label="Video workers", info="Maximum concurrent video sampling jobs.")
+                text_workers = gr.Slider(1, 16, value=4, step=1, label="Text workers", info="Maximum concurrent text file reads.", visible=False)
             limit_max_frames = gr.Checkbox(label="Limit max frames", value=False, info="When enabled, cap sampled frames by Max frames per video")
             max_frames = gr.Slider(4, 64, value=16, step=1, label="Max frames per video", visible=limit_max_frames.value)
             frame_interval = gr.Slider(0.5, 10.0, value=3.0, step=0.5, label="Frame interval (seconds)")
@@ -269,7 +273,19 @@ def build_interface() -> gr.Blocks:
             # into the event handler when you declare a default arg: progress=gr.Progress()
             stage_box = gr.Textbox(label="Stage", value="", interactive=False)
 
-            def do_index(persist_dir: str, p: str, mf: int, interval: float, limit_max: bool, batch_size: int, progress=gr.Progress()):
+            def do_index(
+                persist_dir: str,
+                p: str,
+                mf: int,
+                interval: float,
+                limit_max: bool,
+                batch_size: int,
+                add_only_flag: bool,
+                image_workers_count: int,
+                text_workers_count: int,
+                video_workers_count: int,
+                progress=gr.Progress(),
+            ):
                 """Index folder and report progress via gr.Progress.
 
                 The gr.Progress object is injected by Gradio and calling it with a
@@ -299,7 +315,10 @@ def build_interface() -> gr.Blocks:
                     max_video_frames=mf_arg,
                     frame_interval_sec=float(interval),
                     batch_size=batch_size,
-                    add_only=bool(add_only),
+                    add_only=bool(add_only_flag),
+                    image_workers=int(image_workers_count),
+                    text_workers=int(text_workers_count),
+                    video_workers=int(video_workers_count),
                     progress_cb=_cb,
                 )
                 imgs, vids = asyncio.run(task)
@@ -316,7 +335,18 @@ def build_interface() -> gr.Blocks:
             # the explicit outputs we care about here (stage and status message).
             index_btn.click(
                 fn=do_index,
-                inputs=[persist_dir_box, folder, max_frames, frame_interval, limit_max_frames, batch_size],
+                inputs=[
+                    persist_dir_box,
+                    folder,
+                    max_frames,
+                    frame_interval,
+                    limit_max_frames,
+                    batch_size,
+                    add_only,
+                    image_workers,
+                    text_workers,
+                    video_workers,
+                ],
                 outputs=[stage_box, index_status]
             )
 
