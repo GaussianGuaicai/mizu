@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ipykernel = [
+flash_attn = [
     "flash-attn",
     "triton-windows>=3.4.0.post20"
 ]
