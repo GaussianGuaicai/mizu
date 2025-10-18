@@ -1,6 +1,6 @@
 [project]
 name = "mizu"
-version = "0.1.0"
+version = "1.0.0"
 description = "Mizu RAG Pipline Works"
 requires-python = ">=3.12"
 dependencies = [
