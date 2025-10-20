@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import os
 import sys
@@ -234,11 +235,11 @@ def get_rag(persist_dir: str) -> ChromaRAG:
     return rag
 
 
-def build_interface() -> gr.Blocks:
+def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
     with gr.Blocks(title="Mizu RAG Search") as demo:
         gr.Markdown("# Mizu RAG Image/Video Search\nIndex a folder of images and videos, then search by text or image.")
         gr.Markdown("## Settings")
-        persist_dir_box = gr.Textbox(label="ChromaDB persist_dir", value=".chroma", placeholder=".chroma")
+        persist_dir_box = gr.Textbox(label="ChromaDB persist_dir", value=default_persist_dir, placeholder=".chroma")
         enable_quantize = gr.Checkbox(label="Enable model quantization", value=QUANTIZE, info="When enabled, use a smaller quantized embedding model (quantize to int8, slightly less accurate).")
         enable_flash_attention = gr.Checkbox(label="Enable Flash Attention (if available)", value=ENABLE_FLASH_ATTENTION, info="When enabled, use flash attention in the embedding model if installed (great for indexing).")
 
@@ -698,9 +699,15 @@ def build_interface() -> gr.Blocks:
 
 
 def main() -> None:
-    demo = build_interface()
+    parser = argparse.ArgumentParser(description="Run the Mizu RAG Search Gradio app.")
+    parser.add_argument("--persist-dir", default=".chroma", help="Default ChromaDB persist directory to use in the UI and when indexing.")
+    parser.add_argument("--server-name", default="127.0.0.1", help="Host/IP address for the Gradio server listener.")
+    args = parser.parse_args()
+
+    demo = build_interface(default_persist_dir=args.persist_dir)
     # Allow serving files from our HEIF/HEIC JPG cache directory as well
-    demo.launch(allowed_paths=[os.path.abspath(os.curdir)])
+    allowed_paths = sorted({os.path.abspath(os.curdir), os.path.abspath(args.persist_dir)})
+    demo.launch(server_name=args.server_name, allowed_paths=allowed_paths)
 
 
 if __name__ == "__main__":
