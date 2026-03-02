@@ -8,7 +8,7 @@ dependencies = [
     "gradio>=5.47.2",
     "peft>=0.17.1",
     "pi-heif>=1.1.0",
-    "transformers>=4.44.0",
+    "transformers>=4.51.0",
     "torch==2.7.0+cu128",
     "torchvision",
     "opencv-python-headless>=4.12.0.88",
