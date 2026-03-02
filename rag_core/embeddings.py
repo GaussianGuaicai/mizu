@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-"""Helpers around the ``jinaai/jina-embeddings-v4`` transformer."""
+"""Helpers around multimodal embedding transformers.
 
-from typing import Any, List, Optional, Tuple
+Supported backends:
+- jinaai/jina-embeddings-v4 (default)
+- Qwen3-VL-Embedding models (Transformers + AutoProcessor flow)
+"""
+
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 import torch
 from PIL import Image
-from transformers import AutoModel, BitsAndBytesConfig
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover
-    from modeling_jina_embeddings_v4 import JinaEmbeddingsV4Model
+from transformers import AutoModel, AutoProcessor, BitsAndBytesConfig
 
 __all__ = ["EmbeddingModel", "sample_video_frames"]
 
@@ -32,6 +32,9 @@ class EmbeddingModel:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
+        self.model_name = model_name
+        self.max_length = max_length
+        self.task = task
 
         quantization_config = None
         if quantize:
@@ -42,59 +45,180 @@ class EmbeddingModel:
                     "Failed to configure BitsAndBytes quantization. Install 'bitsandbytes'."
                 ) from exc
 
+        model_kwargs: Dict[str, Any] = {
+            "trust_remote_code": True,
+            "attn_implementation": "flash_attention_2" if enable_flash_atten else None,
+        }
         if quantization_config is not None:
-            self.model = AutoModel.from_pretrained(
-                model_name,
-                trust_remote_code=True,
-                quantization_config=quantization_config,
-                attn_implementation="flash_attention_2" if enable_flash_atten else None,
-            )  # type: ignore[assignment]
-        else:
-            self.model = AutoModel.from_pretrained(
-                model_name,
-                trust_remote_code=True,
-                attn_implementation="flash_attention_2" if enable_flash_atten else None,
-            )  # type: ignore[assignment]
+            model_kwargs["quantization_config"] = quantization_config
+
+        self.model = AutoModel.from_pretrained(model_name, **model_kwargs)  # type: ignore[assignment]
         self.model.to(self.device)
         self.model.eval()
 
-        self.max_length = max_length
-        self.task = task
+        self.backend = "jina"
+        self.processor = None
+        if "qwen3-vl-embedding" in model_name.lower():
+            self.backend = "qwen3_vl_embedding"
+            self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+
         torch.cuda.empty_cache()
+
+    def _batch_slices(self, total: int, batch_size: int) -> List[slice]:
+        if total <= 0:
+            return []
+        step = max(1, min(batch_size, total))
+        return [slice(i, min(i + step, total)) for i in range(0, total, step)]
+
+    def _move_inputs_to_device(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        moved: Dict[str, Any] = {}
+        for key, value in inputs.items():
+            if isinstance(value, torch.Tensor):
+                moved[key] = value.to(self.device)
+            else:
+                moved[key] = value
+        return moved
+
+    def _pool_embeddings(
+        self,
+        embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        if embeddings.ndim == 2:
+            return embeddings
+        if embeddings.ndim != 3:
+            raise RuntimeError(f"Unexpected embedding shape: {tuple(embeddings.shape)}")
+        if attention_mask is not None and attention_mask.ndim == 2:
+            mask = attention_mask.unsqueeze(-1).to(dtype=embeddings.dtype)
+            denom = torch.clamp(mask.sum(dim=1), min=1e-6)
+            pooled = (embeddings * mask).sum(dim=1) / denom
+            return pooled
+        return embeddings.mean(dim=1)
+
+    def _extract_qwen_embedding_tensor(self, outputs: Any, inputs: Dict[str, Any]) -> torch.Tensor:
+        candidate = None
+        for attr in (
+            "embeddings",
+            "text_embeds",
+            "image_embeds",
+            "video_embeds",
+            "pooler_output",
+            "last_hidden_state",
+        ):
+            candidate = getattr(outputs, attr, None)
+            if isinstance(candidate, torch.Tensor):
+                break
+        if not isinstance(candidate, torch.Tensor):
+            if isinstance(outputs, (tuple, list)) and outputs and isinstance(outputs[0], torch.Tensor):
+                candidate = outputs[0]
+            elif isinstance(outputs, dict):
+                for value in outputs.values():
+                    if isinstance(value, torch.Tensor):
+                        candidate = value
+                        break
+        if not isinstance(candidate, torch.Tensor):
+            raise RuntimeError("Failed to extract embeddings from Qwen3-VL-Embedding output")
+
+        candidate = self._pool_embeddings(candidate, attention_mask=inputs.get("attention_mask"))
+        return torch.nn.functional.normalize(candidate, p=2, dim=-1)
 
     @torch.inference_mode()
     def embed_text(self, texts: List[str], batch_size: int = 4):
         if not isinstance(texts, list):
             raise TypeError("texts must be a list of strings")
-        embeddings = self.model.encode_text(
-            texts,
-            max_length=self.max_length,
-            task=self.task,
-            batch_size=min(batch_size, len(texts)),
-        )
-        if isinstance(embeddings, torch.Tensor):
-            embeddings = [embeddings]
+        if not texts:
+            return []
+
+        if self.backend == "jina":
+            embeddings = self.model.encode_text(
+                texts,
+                max_length=self.max_length,
+                task=self.task,
+                batch_size=min(batch_size, len(texts)),
+            )
+            if isinstance(embeddings, torch.Tensor):
+                embeddings = [embeddings]
+            torch.cuda.empty_cache()
+            return [emb.detach().cpu().numpy() for emb in embeddings]
+
+        if self.processor is None:
+            raise RuntimeError("Qwen3-VL-Embedding processor was not initialized")
+
+        rows: List[np.ndarray] = []
+        for s in self._batch_slices(len(texts), batch_size):
+            chunk = texts[s]
+            inputs = self.processor(
+                text=chunk,
+                padding=True,
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors="pt",
+            )
+            moved = self._move_inputs_to_device(inputs)
+            outputs = self.model(**moved)
+            emb = self._extract_qwen_embedding_tensor(outputs, moved)
+            rows.extend([r.detach().cpu().numpy() for r in emb])
+
         torch.cuda.empty_cache()
-        return [emb.detach().cpu().numpy() for emb in embeddings]
+        return rows
 
     @torch.inference_mode()
     def embed_images(self, images: List[Image.Image], batch_size: int = 4):
-        embeddings = self.model.encode_image(
-            images,
-            task=self.task,
-            batch_size=min(batch_size, len(images)),
-        )
-        if isinstance(embeddings, torch.Tensor):
-            embeddings = [embeddings]
+        if not images:
+            return []
+
+        if self.backend == "jina":
+            embeddings = self.model.encode_image(
+                images,
+                task=self.task,
+                batch_size=min(batch_size, len(images)),
+            )
+            if isinstance(embeddings, torch.Tensor):
+                embeddings = [embeddings]
+            torch.cuda.empty_cache()
+            return [emb.detach().cpu().numpy() for emb in embeddings]
+
+        if self.processor is None:
+            raise RuntimeError("Qwen3-VL-Embedding processor was not initialized")
+
+        rows: List[np.ndarray] = []
+        for s in self._batch_slices(len(images), batch_size):
+            chunk = images[s]
+            inputs = self.processor(
+                images=chunk,
+                return_tensors="pt",
+                padding=True,
+            )
+            moved = self._move_inputs_to_device(inputs)
+            outputs = self.model(**moved)
+            emb = self._extract_qwen_embedding_tensor(outputs, moved)
+            rows.extend([r.detach().cpu().numpy() for r in emb])
+
         torch.cuda.empty_cache()
-        return [emb.detach().cpu().numpy() for emb in embeddings]
+        return rows
 
     @torch.inference_mode()
     def embed_video_frames(self, frames: List[np.ndarray], batch_size: int = 4):
         if not frames:
             raise ValueError("No frames provided for video embedding")
-        images = [Image.fromarray(frame) for frame in frames]
-        return self.embed_images(images, batch_size=batch_size)
+
+        if self.backend == "jina":
+            images = [Image.fromarray(frame) for frame in frames]
+            return self.embed_images(images, batch_size=batch_size)
+
+        if self.processor is None:
+            raise RuntimeError("Qwen3-VL-Embedding processor was not initialized")
+
+        inputs = self.processor(
+            videos=[frames],
+            return_tensors="pt",
+            padding=True,
+        )
+        moved = self._move_inputs_to_device(inputs)
+        outputs = self.model(**moved)
+        emb = self._extract_qwen_embedding_tensor(outputs, moved)
+        torch.cuda.empty_cache()
+        return [r.detach().cpu().numpy() for r in emb]
 
 
 def sample_video_frames(
@@ -203,7 +327,15 @@ def sample_video_frames(
                 used_indices.append(int(max(0, int(round(before_read_pos)))))
             else:
                 if fps > 0:
-                    approx_idx = int(max(0, min(int(round(ts * fps)), (total_frames - 1) if total_frames > 0 else int(round(ts * fps)))))
+                    approx_idx = int(
+                        max(
+                            0,
+                            min(
+                                int(round(ts * fps)),
+                                (total_frames - 1) if total_frames > 0 else int(round(ts * fps)),
+                            ),
+                        )
+                    )
                     used_indices.append(approx_idx)
                 else:
                     used_indices.append(len(frames) - 1)

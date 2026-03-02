@@ -223,15 +223,23 @@ atexit.register(_cleanup_tmp_cache_dir)
 _RAG_CACHE: Dict[str, ChromaRAG] = {}
 QUANTIZE = True
 ENABLE_FLASH_ATTENTION = False
+EMBEDDING_MODEL_NAME = "jinaai/jina-embeddings-v4"
 
 
-def get_rag(persist_dir: str) -> ChromaRAG:
-    """Lazily create or return cached ChromaRAG for the given persist_dir."""
+def get_rag(persist_dir: str, model_name: str) -> ChromaRAG:
+    """Lazily create or return cached ChromaRAG for the given persist_dir/model."""
     pd = os.path.abspath(persist_dir or ".chroma")
-    if pd in _RAG_CACHE:
-        return _RAG_CACHE[pd]
-    rag = ChromaRAG(persist_dir=pd,quantize=QUANTIZE)
-    _RAG_CACHE[pd] = rag
+    model = (model_name or EMBEDDING_MODEL_NAME).strip()
+    cache_key = f"{pd}::{model}"
+    if cache_key in _RAG_CACHE:
+        return _RAG_CACHE[cache_key]
+    rag = ChromaRAG(
+        persist_dir=pd,
+        model_name=model,
+        quantize=QUANTIZE,
+        enable_flash_atten=ENABLE_FLASH_ATTENTION,
+    )
+    _RAG_CACHE[cache_key] = rag
     return rag
 
 
@@ -242,6 +250,7 @@ def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
         persist_dir_box = gr.Textbox(label="ChromaDB persist_dir", value=default_persist_dir, placeholder=".chroma")
         enable_quantize = gr.Checkbox(label="Enable model quantization", value=QUANTIZE, info="When enabled, use a smaller quantized embedding model (quantize to int8, slightly less accurate).")
         enable_flash_attention = gr.Checkbox(label="Enable Flash Attention (if available)", value=ENABLE_FLASH_ATTENTION, info="When enabled, use flash attention in the embedding model if installed (great for indexing).")
+        embedding_model_name = gr.Textbox(label="Embedding model", value=EMBEDDING_MODEL_NAME, info="Examples: jinaai/jina-embeddings-v4, Qwen/Qwen3-VL-Embedding-4B")
 
         # Update global QUANTIZE variable when checkbox changes, so new RAG instances use the updated setting
         def _on_quantize_change(q: bool):
@@ -254,6 +263,11 @@ def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
             global ENABLE_FLASH_ATTENTION
             ENABLE_FLASH_ATTENTION = e
         enable_flash_attention.change(fn=_on_flash_atten_change, inputs=[enable_flash_attention])
+
+        def _on_embedding_model_change(name: str):
+            global EMBEDDING_MODEL_NAME
+            EMBEDDING_MODEL_NAME = (name or EMBEDDING_MODEL_NAME).strip()
+        embedding_model_name.change(fn=_on_embedding_model_change, inputs=[embedding_model_name])
 
         with gr.Tab("Index"):
             folder = gr.Textbox(label="Folder to index", placeholder="C:/path/to/media or /path/to/media")
@@ -276,6 +290,7 @@ def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
 
             def do_index(
                 persist_dir: str,
+                model_name: str,
                 p: str,
                 mf: int,
                 interval: float,
@@ -295,7 +310,7 @@ def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
                 gr.set_static_paths(persist_dir)
                 if not p or not os.path.isdir(p):
                     return "", "Provide a valid folder path."
-                rag = get_rag(persist_dir)
+                rag = get_rag(persist_dir, model_name)
                 mf_arg = int(mf) if limit_max else None
 
                 def _cb(done: int, total: int, stage: str):
@@ -338,6 +353,7 @@ def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
                 fn=do_index,
                 inputs=[
                     persist_dir_box,
+                    embedding_model_name,
                     folder,
                     max_frames,
                     frame_interval,
@@ -500,10 +516,10 @@ def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
                 video_group_items, order = _build_video_gallery_items(filtered_vid_res, sort_mode_key)
                 return imgs_items, video_group_items, order
 
-            def do_search(persist_dir: str, q: str, img_path: str | None, k: int, types: List[str], sort_choice: str):
+            def do_search(persist_dir: str, model_name: str, q: str, img_path: str | None, k: int, types: List[str], sort_choice: str):
                 gr.set_static_paths(persist_dir)
                 res: Dict[str, Any] | None = None
-                rag = get_rag(persist_dir)
+                rag = get_rag(persist_dir, model_name)
                 if img_path and os.path.isfile(img_path):
                     try:
                         with Image.open(img_path) as im:
@@ -533,7 +549,7 @@ def build_interface(default_persist_dir: str = ".chroma") -> gr.Blocks:
                 return img_update, vid_update, frames_update, (res, video_paths_order)
             search_btn.click(
                 fn=do_search,
-                inputs=[persist_dir_box, query, image_file, topk, type_filter, sort_mode],
+                inputs=[persist_dir_box, embedding_model_name, query, image_file, topk, type_filter, sort_mode],
                 outputs=[images_gallery, videos_gallery, video_frames_gallery, cached_res]
             )
 

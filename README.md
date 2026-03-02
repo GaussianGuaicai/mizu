@@ -5,7 +5,7 @@ An visual media RAG pipeline that indexed tens of thousands of my images and vid
 ## Highlights
 
 - **Interactive UI** – single-page Gradio app with dedicated tabs for indexing new media and searching existing collections.
-- **Multimodal embeddings** – `mizu` use `jinaai/jina-embeddings-v4` as default to embed images and sampled video frames.
+- **Multimodal embeddings** – supports `jinaai/jina-embeddings-v4` (default) and `Qwen/Qwen3-VL-Embedding-*` models via Transformers.
 - **Video-aware search** – extracts representative frames, preserves timestamps, and groups results per source video.
 - **HEIF/AVIF friendly** – transparently converts HEIC/HEIF/AVIF images for display while keeping the originals untouched.
 - **Optimized for mass indexing** – asynchronous, batched ingestion with optional INT8 quantization and Flash Attention acceleration when the toolchain supports it.
@@ -13,7 +13,11 @@ An visual media RAG pipeline that indexed tens of thousands of my images and vid
 ## Requirements
 
 - Python 3.12+
-- Access to the Hugging Face model **`jinaai/jina-embeddings-v4`**[![Model on HF](https://huggingface.co/datasets/huggingface/badges/resolve/main/model-on-hf-sm.svg)](https://huggingface.co/jinaai/jina-embeddings-v4). Accept the model license in your Hugging Face account before first use.
+- Access to at least one supported Hugging Face embedding model:
+  - **`jinaai/jina-embeddings-v4`** (default)
+  - **`Qwen/Qwen3-VL-Embedding-*`** (optional)
+
+Accept the relevant model license in your Hugging Face account before first use.
 
 Core dependencies are declared in `pyproject.toml` and include ChromaDB, Gradio, Transformers, Torch, OpenCV, BitsAndBytes, and pi-heif.
 
@@ -29,6 +33,19 @@ pip install torch --index-url https://download.pytorch.org/whl/cu128
 # Optional extras for Flash Attention on supported platforms, this is the method to compile & install flash-attn in Windows
 pip install flash-attn triton-windows>=3.4.0.post20
 ```
+
+
+### Using Qwen3-VL-Embedding
+
+`EmbeddingModel` auto-detects Qwen3-VL-Embedding when `model_name` contains `qwen3-vl-embedding` and then switches to Transformers `AutoProcessor` + `AutoModel` flow for text/image/video embedding.
+
+```python
+from rag_core.chroma import ChromaRAG
+
+rag = ChromaRAG(model_name="Qwen/Qwen3-VL-Embedding-4B")
+```
+
+For video embedding, mizu sends sampled frame sequences through the processor `videos=[frames]` pipeline (Qwen video preprocessing path) before encoding.
 
 ## Run the app
 
@@ -74,7 +91,7 @@ Video results arrive organized by source file. Selecting a video tile reveals al
 ## Troubleshooting
 
 - **BitsAndBytes not found**: reinstall with `pip install bitsandbytes>=0.48.1` and ensure you are using a CUDA-enabled build.
-- **Missing model files**: run `huggingface-cli login` and make sure `jinaai/jina-embeddings-v4` is accessible to your account; the first run will download the necessary weights.
+- **Missing model files**: run `huggingface-cli login` and make sure your selected embedding model (Jina or Qwen3-VL-Embedding) is accessible to your account; the first run will download the necessary weights.
 
 ## License
 
